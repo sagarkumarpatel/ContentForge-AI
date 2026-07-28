@@ -113,8 +113,8 @@ seo_agent = Agent(
 
 writer = Agent(
     role="Writer Agent",
-    goal="Write a well-structured, engaging long-form blog post using the research and SEO plan",
-    backstory="You are a skilled content writer who turns research into clear, engaging articles.",
+    goal="Write a well-structured, visually appealing blog post using the research and SEO plan, heavily utilizing emojis and markdown formatting.",
+    backstory="You are a skilled content writer who turns research into clear, engaging articles. You always include relevant emojis, bold text, bullet points, and varied heading sizes to make the reading experience visually attractive.",
     llm=llm,
     verbose=True,
 )
@@ -129,8 +129,8 @@ editor = Agent(
 
 designer = Agent(
     role="Designer Agent",
-    goal="Reformat the article into a Twitter thread, LinkedIn post, and email newsletter",
-    backstory="You are a social media specialist who adapts long-form content into platform-native formats.",
+    goal="Reformat the article into highly engaging social media formats with rich markdown formatting and emojis.",
+    backstory="You are a social media specialist who adapts long-form content into platform-native formats. You heavily use emojis, bold text, bullet points, and headings to make the content visually striking, highly readable, and deeply engaging.",
     llm=llm_fast,
     verbose=True,
 )
@@ -175,20 +175,20 @@ def build_tasks(topic: str):
         context=[t2],
     )
     t4 = Task(
-        description=f"Write a short, engaging blog post (300-400 words) on '{topic}' using the research and SEO outline. Keep it concise.",
-        expected_output="A short blog post in Markdown, following the SEO heading structure. Max 400 words.",
+        description=f"Write an engaging blog post (300-400 words) on '{topic}' using the research and SEO outline. Ensure the post is visually attractive by using emojis, bolding, and markdown headings.",
+        expected_output="A visually attractive blog post in Markdown with emojis and formatting. Max 400 words.",
         agent=writer,
         context=[t2, t3],
     )
     t5 = Task(
-        description="Proofread and polish the draft blog post for grammar, clarity, and flow. Keep Markdown structure.",
-        expected_output="The final polished blog post in Markdown.",
+        description="Proofread and polish the draft blog post for grammar, clarity, and flow. Ensure the rich Markdown structure and emojis are preserved and enhanced for visual appeal.",
+        expected_output="The final polished blog post in Markdown, full of emojis and attractive formatting.",
         agent=editor,
         context=[t4],
     )
     t6 = Task(
-        description="Repurpose the polished post into: (1) an engaging 5-7 tweet thread with details and hashtags, (2) a detailed LinkedIn post (150-250 words) with professional insights, (3) a comprehensive email newsletter blurb (150-200 words).",
-        expected_output="Three detailed labeled sections: TWITTER THREAD, LINKEDIN POST, EMAIL BLURB.",
+        description="Repurpose the polished post into: (1) an engaging 5-7 tweet thread with details, emojis, and hashtags, (2) a detailed LinkedIn post (150-250 words) with rich markdown formatting (headings, bolding, bullet points) and emojis for visual appeal, (3) a comprehensive email newsletter blurb (150-200 words) using attractive formatting and emojis.",
+        expected_output="Three detailed labeled sections with heavy emoji and markdown usage: TWITTER THREAD, LINKEDIN POST, EMAIL BLURB.",
         agent=designer,
         context=[t5],
     )

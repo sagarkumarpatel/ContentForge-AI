@@ -40,6 +40,7 @@ async def generate_content(req: GenerateRequest, request: Request):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, # Merge stderr into stdout
             text=True,
+            encoding="utf-8",
             bufsize=1, # Line buffered
             env=env
         )

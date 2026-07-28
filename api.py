@@ -6,6 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
+from fastapi.staticfiles import StaticFiles
+import requests
 
 app = FastAPI()
 
@@ -17,6 +19,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+os.makedirs("outputs", exist_ok=True)
+app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 
 class GenerateRequest(BaseModel):
     topic: str
@@ -39,6 +44,8 @@ async def generate_content(req: GenerateRequest, request: Request):
         )
 
         final_output_path = None
+        image_url = None
+        discord_posted = False
 
         # Read line by line as it comes out
         for line in process.stdout:
@@ -54,6 +61,15 @@ async def generate_content(req: GenerateRequest, request: Request):
             # Look for the final output path
             if "Done! Full output saved to" in line_str:
                 final_output_path = line_str.split("Done! Full output saved to ")[1].strip()
+                
+            # Look for image saved path
+            if "Image saved to" in line_str:
+                image_path = line_str.split("Image saved to ")[1].strip()
+                image_url = "/" + image_path.replace("\\", "/")
+                
+            # Look for discord post success
+            if "Successfully posted to Discord!" in line_str:
+                discord_posted = True
 
             yield {
                 "event": "message",
@@ -76,9 +92,17 @@ async def generate_content(req: GenerateRequest, request: Request):
                 if cleaned.endswith("```"):
                     cleaned = cleaned[:-3]
                 
+                payload = {
+                    "type": "complete", 
+                    "content": cleaned,
+                    "discord_posted": discord_posted
+                }
+                if image_url:
+                    payload["image_url"] = image_url
+
                 yield {
                     "event": "message",
-                    "data": json.dumps({"type": "complete", "content": cleaned})
+                    "data": json.dumps(payload)
                 }
         else:
             yield {
@@ -87,3 +111,40 @@ async def generate_content(req: GenerateRequest, request: Request):
             }
 
     return EventSourceResponse(event_generator())
+
+class PublishRequest(BaseModel):
+    content: str
+    image_path: str = None
+
+@app.post("/publish")
+async def publish_to_discord(req: PublishRequest):
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        return {"success": False, "error": "DISCORD_WEBHOOK_URL not configured"}
+    
+    local_image_path = None
+    if req.image_path:
+        if req.image_path.startswith("/outputs/"):
+            local_image_path = req.image_path.lstrip("/")
+        else:
+            local_image_path = req.image_path
+
+    try:
+        files = {}
+        if local_image_path and os.path.exists(local_image_path):
+            files["file"] = open(local_image_path, "rb")
+            
+        # Discord allows up to 2000 characters for the content message
+        payload = {"content": req.content[:2000]}
+        
+        resp = requests.post(webhook_url, data=payload, files=files if files else None)
+        
+        if files:
+            files["file"].close()
+            
+        if resp.status_code in [200, 204]:
+            return {"success": True}
+        else:
+            return {"success": False, "error": resp.text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

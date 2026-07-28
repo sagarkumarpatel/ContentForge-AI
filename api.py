@@ -2,6 +2,7 @@ import subprocess
 import os
 import sys
 import json
+from typing import Optional
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -114,7 +115,7 @@ async def generate_content(req: GenerateRequest, request: Request):
 
 class PublishRequest(BaseModel):
     content: str
-    image_path: str = None
+    image_path: Optional[str] = None
 
 @app.post("/publish")
 async def publish_to_discord(req: PublishRequest):

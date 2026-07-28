@@ -210,41 +210,51 @@ def build_tasks(topic: str):
 # Image generation (Gemini -> Pollinations fallback)
 
 def generate_image(image_prompt: str, img_path: str) -> bool:
+    """Generates a cover image. Tries Hugging Face SDXL first (if HF_API_KEY is set),
+    falls back to Pollinations.ai (free, no key required)."""
     success = False
+    hf_key = os.getenv("HF_API_KEY")
 
-    if GEMINI_API_KEY:
+    if hf_key:
         try:
-            print(f"Generating image with Gemini using prompt: {image_prompt}")
-            url = (
-                "https://generativelanguage.googleapis.com/v1beta/models/"
-                f"imagen-3.0-generate-001:predict?key={GEMINI_API_KEY}"
-            )
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "instances": [{"prompt": image_prompt}],
-                "parameters": {"sampleCount": 1, "outputOptions": {"mimeType": "image/png"}}
-            }
-            resp = requests.post(url, json=payload, headers=headers)
-            if resp.status_code == 200:
-                b64_image = resp.json()['predictions'][0]['bytesBase64Encoded']
-                with open(img_path, "wb") as f:
-                    f.write(base64.b64decode(b64_image))
-                success = True
-            else:
-                print(f"Gemini API error: {resp.text}")
+            print("Generating image with Hugging Face SDXL...")
+            url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+            headers = {"Authorization": f"Bearer {hf_key}"}
+            for attempt in range(3):
+                resp = requests.post(
+                    url,
+                    headers=headers,
+                    json={"inputs": image_prompt},
+                    timeout=90,
+                )
+                if resp.status_code == 503:
+                    wait = resp.json().get("estimated_time", 20)
+                    print(f"HF model loading, waiting {int(min(wait, 30))}s (attempt {attempt+1}/3)...")
+                    time.sleep(min(wait, 30))
+                    continue
+                if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image"):
+                    with open(img_path, "wb") as f:
+                        f.write(resp.content)
+                    success = True
+                    break
+                else:
+                    print(f"Hugging Face API error: {resp.status_code} - {resp.text[:300]}")
+                    break
         except Exception as e:
-            print(f"Gemini generation failed: {e}")
+            print(f"Hugging Face generation failed: {e}")
 
     if not success:
-        print("Falling back to Pollinations.ai for image generation...")
+        print("Generating image with Pollinations.ai...")
         try:
             encoded_prompt = urllib.parse.quote(image_prompt)
             url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-            resp = requests.get(url)
+            resp = requests.get(url, timeout=60)
             if resp.status_code == 200:
                 with open(img_path, "wb") as f:
                     f.write(resp.content)
                 success = True
+            else:
+                print(f"Pollinations API error: {resp.status_code}")
         except Exception as e:
             print(f"Pollinations generation failed: {e}")
 
@@ -253,7 +263,7 @@ def generate_image(image_prompt: str, img_path: str) -> bool:
 
 # Discord auto-post
 
-def post_to_discord(text_content: str, image_path: str = None) -> bool:
+def post_to_discord(text_content: str, image_path: str | None = None) -> bool:
     """Posts the final content (and optional image) to a Discord channel via webhook."""
     if not DISCORD_WEBHOOK_URL:
         print("No DISCORD_WEBHOOK_URL set in .env -- skipping Discord post.")

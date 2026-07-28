@@ -187,8 +187,8 @@ def build_tasks(topic: str):
         context=[t4],
     )
     t6 = Task(
-        description="Repurpose the polished post into: (1) a short 3-tweet thread, (2) a short LinkedIn post (50-75 words), (3) an email blurb (50 words).",
-        expected_output="Three concise labeled sections: TWITTER THREAD, LINKEDIN POST, EMAIL BLURB.",
+        description="Repurpose the polished post into: (1) an engaging 5-7 tweet thread with details and hashtags, (2) a detailed LinkedIn post (150-250 words) with professional insights, (3) a comprehensive email newsletter blurb (150-200 words).",
+        expected_output="Three detailed labeled sections: TWITTER THREAD, LINKEDIN POST, EMAIL BLURB.",
         agent=designer,
         context=[t5],
     )

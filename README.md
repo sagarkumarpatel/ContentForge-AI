@@ -1,20 +1,21 @@
 # 🤖 ContentForge-AI
 
-A stunning **Next.js & FastAPI web application** powered by an **8-agent AI pipeline** built with [CrewAI](https://crewai.com). It takes any topic and automatically produces a complete, publish-ready content package — including a blog post, Twitter thread, LinkedIn post, an email blurb, and a generated cover image. It can even auto-post directly to Discord!
+A stunning **Next.js & FastAPI web application** powered by an **8-agent AI pipeline** built with [CrewAI](https://crewai.com). It takes any topic and automatically produces a complete, publish-ready content package — including a blog post, Twitter thread, LinkedIn post, an email blurb, and a generated cover image. You can then review and **manually approve** posting to Discord with a single click.
 
-Runs efficiently using a dual-model approach with [Groq](https://console.groq.com) (Llama 3.3 70B & Llama 3.1 8B), [Serper](https://serper.dev) for web search, and Gemini Imagen 3 for cover images.
+Runs efficiently using a dual-model approach with [Groq](https://console.groq.com) (Llama 3.3 70B & Llama 3.1 8B), [Serper](https://serper.dev) for web search, and [Pollinations.ai](https://pollinations.ai) for cover image generation (free, no key required).
 
 ---
 
 ## ✨ Features
 
 - **Beautiful Next.js Frontend**: A sleek, dark-mode UI with glassmorphism effects, Framer Motion animations, and a responsive layout.
-- **Persistent Search History**: A responsive left sidebar saves and displays all your previous generated sessions using local storage—never lose past content.
-- **FastAPI Backend**: A robust Python backend that runs the CrewAI pipeline and streams real-time logs to the frontend via Server-Sent Events (SSE).
-- **8 Autonomous Agents**: Specialized AI agents handle Topic Analysis, Research, SEO, Writing, Editing, Social Media adaptation, Image Prompting, and Publishing sequentially.
-- **Image Generation**: Automatically creates a highly-descriptive prompt and generates a cover image via Gemini Imagen (with a Pollinations.ai fallback).
-- **Discord Auto-Posting**: Pushes beautifully formatted Discord embeds with the cover image attached directly to your server via Webhooks.
-- **Free & Lightning Fast**: Powered by Groq's LPU inference. Fast 8B models handle simpler tasks, while the powerful 70B model handles complex reasoning and writing to optimize rate limits.
+- **Persistent Session History**: A responsive left sidebar saves all your previous generated sessions using local storage — never lose past content.
+- **FastAPI Backend with SSE Streaming**: A robust Python backend that runs the CrewAI pipeline and streams real-time logs to the frontend as they happen.
+- **8 Autonomous Agents**: Specialized AI agents handle Topic Analysis, Research, SEO, Writing, Editing, Social Media adaptation, Image Prompting, and Publishing — all running sequentially.
+- **Free Image Generation**: Automatically creates a vivid, descriptive prompt and generates a 1024×1024 cover image via [Pollinations.ai](https://pollinations.ai) — completely free, no API key needed.
+- **Approval-Gated Discord Posting**: After content is generated, a dedicated **Discord** tab shows you an exact preview of the embed (title + summary + LinkedIn preview) before you post. Click **"Approve & Post to Discord"** to publish — nothing is ever sent automatically.
+- **Resilient LLM Calls**: A custom retry wrapper handles Groq free-tier rate limits (with smart wait-time parsing) *and* transient network drops (`ConnectionResetError`, `httpx.ConnectError`) with automatic backoff — so a flaky connection won't kill your run.
+- **Free & Lightning Fast**: Powered by Groq's LPU inference. Fast 8B models handle simpler tasks (Topic Analyzer, SEO, Designer); the powerful 70B model handles complex reasoning and writing.
 
 ---
 
@@ -34,17 +35,18 @@ Enter a topic in the UI (e.g., *"The impact of AI agents on small business produ
 
 | Output | Description |
 |--------|-------------|
-| 📊 Research angles | 3–5 focused subtopics to investigate |
+| 📊 Research angles | 3–5 focused subtopics (under 100 words) |
 | 📚 Research notes | Facts, statistics, examples per angle |
 | 🎯 SEO outline | Keyword list + H1/H2/H3 heading structure |
-| ✍️ Blog post | Short, engaging 300–400 word Markdown article |
+| ✍️ Blog post | Engaging 300–400 word Markdown article with emojis |
 | ✅ Polished draft | Grammar-checked, flow-improved version |
-| 🐦 Twitter thread | 3-tweet thread ready to post |
-| 💼 LinkedIn post | Short, professional post |
-| 📧 Email blurb | Quick newsletter snippet |
-| 🎨 Cover Image | A generated image based on the article's theme |
+| 🐦 Twitter thread | 5–7 tweet thread with hashtags & emojis |
+| 💼 LinkedIn post | Professional post (up to 150 words) |
+| 📧 Email blurb | Newsletter snippet (up to 150 words) |
+| 🎨 Cover image | 1024×1024 image generated via Pollinations.ai |
+| 💬 Discord preview | Exact embed preview (title + summary + LinkedIn) before posting |
 
-*All final outputs are displayed cleanly in the UI, saved into your browser's persistent history, saved locally in the `outputs/` folder, and optionally published to Discord.*
+*All outputs are displayed in the UI, saved to your browser's persistent history, saved locally in the `outputs/` folder, and optionally published to Discord after your explicit approval.*
 
 ---
 
@@ -52,16 +54,16 @@ Enter a topic in the UI (e.g., *"The impact of AI agents on small business produ
 
 The system runs agents **sequentially** — each agent receives the output of the previous one as context.
 
-| # | Agent | Role |
-|---|-------|------|
-| 1 | **Topic Analyzer** | Breaks topic into 3-5 research angles |
-| 2 | **Research Agent** | Gathers facts, stats & examples via web search |
-| 3 | **SEO Agent** | Builds keyword list + H1/H2/H3 outline |
-| 4 | **Writer Agent** | Writes the core blog post using research + outline |
-| 5 | **Editor Agent** | Proofreads, polishes grammar & flow |
-| 6 | **Designer Agent** | Repurposes post → Twitter / LinkedIn / Email |
-| 7 | **Image Prompt Agent** | Writes a vivid, descriptive prompt for the cover image |
-| 8 | **Publisher Agent** | Compiles everything into the final JSON package |
+| # | Agent | Model | Role |
+|---|-------|-------|------|
+| 1 | **Topic Analyzer** | Llama 3.1 8B | Breaks topic into 3–5 research angles (≤100 words) |
+| 2 | **Research Agent** | Llama 3.3 70B | Gathers facts, stats & examples via web search (max 2 searches) |
+| 3 | **SEO Agent** | Llama 3.1 8B | Builds keyword list + H1/H2/H3 outline |
+| 4 | **Writer Agent** | Llama 3.3 70B | Writes the core blog post using research + outline |
+| 5 | **Editor Agent** | Llama 3.3 70B | Proofreads, polishes grammar & flow |
+| 6 | **Designer Agent** | Llama 3.1 8B | Repurposes post → Twitter / LinkedIn / Email (with word caps) |
+| 7 | **Image Prompt Agent** | Llama 3.3 70B | Writes a vivid, descriptive prompt for the cover image |
+| 8 | **Publisher Agent** | Llama 3.3 70B | Compiles everything into the final JSON package |
 
 ---
 
@@ -70,19 +72,19 @@ The system runs agents **sequentially** — each agent receives the output of th
 ```
 agent_project/
 │
-├── api.py                 # FastAPI backend (handles streaming & execution)
-├── crew_setup.py          # Core CrewAI logic (Agents, Tasks, Image Gen, Discord)
-├── run_app.bat            # Windows script to launch both Frontend and Backend
+├── api.py                 # FastAPI backend (SSE streaming, /generate, /publish-discord)
+├── crew_setup.py          # CrewAI pipeline (agents, tasks, image gen, Discord posting)
+├── run_app.bat            # Windows script to launch both frontend and backend
 ├── requirements.txt       # Python backend dependencies
-├── .env                   # Your API keys (never commit this to Git!)
+├── .env                   # Your API keys (never commit this!)
 │
 ├── frontend/              # Next.js React application
 │   ├── app/
-│   │   ├── page.tsx       # Main UI page, SSE streaming, sidebar & local storage history
-│   │   ├── globals.css    # Tailwind styling & Glassmorphism
+│   │   ├── page.tsx       # Main UI: SSE streaming, tabs, Discord approve flow, sidebar
+│   │   ├── globals.css    # Global styles & glassmorphism effects
 │   ├── package.json       # Node.js frontend dependencies
 │
-├── outputs/               # Generated Markdown and PNG cover images
+├── outputs/               # Generated Markdown files & PNG cover images
 │
 └── venv/                  # Python virtual environment
 ```
@@ -113,40 +115,55 @@ npm install
 ```
 
 ### 3. API Keys (.env)
-Create a `.env` file in the root `agent_project` directory and add your keys:
-```
-GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-SERPER_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx    # Optional, for web search
-GEMINI_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx    # Optional, for cover images (falls back to Pollinations if missing)
-DISCORD_WEBHOOK_URL=https://discord.com/api/...    # Optional, for auto-posting completed packages
+Create a `.env` file in the root `agent_project/` directory:
+
+```env
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx        # Required
+SERPER_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx          # Optional — enables live web search
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... # Optional — enables Discord posting
 ```
 
-*Note: The pipeline is heavily optimized to keep token usage low and avoid Groq free-tier rate limits by employing a smart backoff strategy and model-routing.*
+> **Image generation** uses [Pollinations.ai](https://pollinations.ai) — completely free, no key needed.
+
+> **Telemetry** is disabled by default (`CREWAI_DISABLE_TELEMETRY=true`, `OTEL_SDK_DISABLED=true`) so there are no background phone-home requests cluttering your logs.
 
 ---
 
 ## 🏃 Running the Application
 
 ### The Easy Way (Windows)
-Simply double-click the **`run_app.bat`** file in the project folder! 
-This will automatically open two terminal windows (one for the backend, one for the frontend).
+Double-click **`run_app.bat`** in the project folder.  
+This opens two terminal windows — one for the backend, one for the frontend.
 
 ### The Manual Way
-**Terminal 1 (Backend):**
+
+**Terminal 1 — Backend:**
 ```powershell
 venv\Scripts\activate
 uvicorn api:app --reload
 ```
 
-**Terminal 2 (Frontend):**
+**Terminal 2 — Frontend:**
 ```powershell
 cd frontend
 npm run dev
 ```
 
 ### Viewing the App
-Once both servers are running, open your browser and go to:
+Once both servers are running, open your browser:  
 👉 **[http://localhost:3000](http://localhost:3000)**
+
+---
+
+## 💬 Discord Approval Flow
+
+1. After generation completes, click the **Discord** tab in the results panel.
+2. A preview card shows the **exact embed** (title, summary, LinkedIn preview + cover image) that will be posted to your Discord channel.
+3. Click **"Approve & Post to Discord"** to publish.
+4. The button shows a loading spinner while posting, then switches to a green **"Posted to Discord ✓"** confirmation.
+5. On failure, an inline error message appears and the button re-enables for a retry.
+
+> Nothing is ever posted automatically — posting is always a deliberate user action.
 
 ---
 

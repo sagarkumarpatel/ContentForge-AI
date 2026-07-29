@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from fastapi.staticfiles import StaticFiles
 import requests
+from crew_setup import post_to_discord, build_discord_message
 
 app = FastAPI()
 
@@ -97,7 +98,8 @@ async def generate_content(req: GenerateRequest, request: Request):
                 payload = {
                     "type": "complete", 
                     "content": cleaned,
-                    "discord_posted": discord_posted
+                    "discord_posted": discord_posted,
+                    "discord_preview": build_discord_message(cleaned)
                 }
                 if image_url:
                     payload["image_url"] = image_url
@@ -118,12 +120,8 @@ class PublishRequest(BaseModel):
     content: str
     image_path: Optional[str] = None
 
-@app.post("/publish")
-async def publish_to_discord(req: PublishRequest):
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
-    if not webhook_url:
-        return {"success": False, "error": "DISCORD_WEBHOOK_URL not configured"}
-    
+@app.post("/publish-discord")
+async def api_publish_discord(req: PublishRequest):
     local_image_path = None
     if req.image_path:
         if req.image_path.startswith("/outputs/"):
@@ -131,22 +129,9 @@ async def publish_to_discord(req: PublishRequest):
         else:
             local_image_path = req.image_path
 
-    try:
-        files = {}
-        if local_image_path and os.path.exists(local_image_path):
-            files["file"] = open(local_image_path, "rb")
-            
-        # Discord allows up to 2000 characters for the content message
-        payload = {"content": req.content[:2000]}
-        
-        resp = requests.post(webhook_url, data=payload, files=files if files else None)
-        
-        if files:
-            files["file"].close()
-            
-        if resp.status_code in [200, 204]:
-            return {"success": True}
-        else:
-            return {"success": False, "error": resp.text}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    success = post_to_discord(req.content, local_image_path)
+    if success:
+        return {"posted": True}
+    else:
+        return {"posted": False, "error": "Failed to post to Discord"}
+

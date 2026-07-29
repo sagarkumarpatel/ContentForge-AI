@@ -12,6 +12,7 @@ interface Session {
   result: any;
   imageUrl: string | null;
   discordPosted: boolean;
+  discordPreview?: string | null;
 }
 
 const AGENTS = [
@@ -36,6 +37,9 @@ export default function Home() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [discordPosted, setDiscordPosted] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [isPublishingDiscord, setIsPublishingDiscord] = useState(false);
+  const [discordPublishError, setDiscordPublishError] = useState<string | null>(null);
+  const [discordPreview, setDiscordPreview] = useState<string | null>(null);
 
   // Sidebar & History State
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -101,6 +105,7 @@ export default function Home() {
     setCompletedAgents([]);
     setImageUrl(null);
     setDiscordPosted(false);
+    setDiscordPreview(null);
     setImageError(false);
     setActiveSessionId(null);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -120,6 +125,7 @@ export default function Home() {
       let finalResult = null;
       let finalImageUrl = null;
       let finalDiscordPosted = false;
+      let finalDiscordPreview = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -154,10 +160,12 @@ export default function Home() {
                   finalResult = JSON.parse(data.content);
                   finalImageUrl = data.image_url || null;
                   finalDiscordPosted = !!data.discord_posted;
+                  finalDiscordPreview = data.discord_preview || null;
 
                   setResult(finalResult);
                   setImageUrl(finalImageUrl);
                   setDiscordPosted(finalDiscordPosted);
+                  setDiscordPreview(finalDiscordPreview);
 
                   // Create new session
                   const newSession: Session = {
@@ -166,7 +174,8 @@ export default function Home() {
                     date: Date.now(),
                     result: finalResult,
                     imageUrl: finalImageUrl,
-                    discordPosted: finalDiscordPosted
+                    discordPosted: finalDiscordPosted,
+                    discordPreview: finalDiscordPreview
                   };
                   setSessions(prev => [newSession, ...prev]);
                   setActiveSessionId(newSession.id);
@@ -196,6 +205,32 @@ export default function Home() {
     }
   };
 
+  const handlePublishDiscord = async () => {
+    setIsPublishingDiscord(true);
+    setDiscordPublishError(null);
+    try {
+      const response = await fetch("http://localhost:8000/publish-discord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: JSON.stringify(result),
+          image_path: imageUrl
+        }),
+      });
+      const data = await response.json();
+      if (data.posted) {
+        setDiscordPosted(true);
+        setSessions(prev => prev.map(s => s.id === activeSessionId ? { ...s, discordPosted: true } : s));
+      } else {
+        setDiscordPublishError(data.error || "Failed to post to Discord");
+      }
+    } catch (error: any) {
+      setDiscordPublishError(error.message || "An error occurred");
+    } finally {
+      setIsPublishingDiscord(false);
+    }
+  };
+
   const copyToClipboard = (text: string, tab: string) => {
     navigator.clipboard.writeText(text);
     setCopiedTab(tab);
@@ -207,6 +242,7 @@ export default function Home() {
     setResult(session.result);
     setImageUrl(session.imageUrl);
     setDiscordPosted(session.discordPosted);
+    setDiscordPreview(session.discordPreview || null);
     setActiveSessionId(session.id);
     setImageError(false);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -217,6 +253,7 @@ export default function Home() {
     setResult(null);
     setImageUrl(null);
     setDiscordPosted(false);
+    setDiscordPreview(null);
     setActiveSessionId(null);
     setLogs([]);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -574,7 +611,8 @@ export default function Home() {
                       { id: 'blog', label: 'Article Data', icon: AlignLeft },
                       { id: 'twitter', label: 'Thread Sync', icon: Share2 },
                       { id: 'linkedin', label: 'Professional Node', icon: Briefcase },
-                      { id: 'email', label: 'Broadcast', icon: Mail }
+                      { id: 'email', label: 'Broadcast', icon: Mail },
+                      { id: 'discord', label: 'Discord', icon: MessageSquare }
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -614,6 +652,32 @@ export default function Home() {
                       {activeTab === 'twitter' && renderSocialCard(result.twitter_thread, 'Twitter', Share2)}
                       {activeTab === 'linkedin' && renderSocialCard(result.linkedin_post, 'LinkedIn', Briefcase)}
                       {activeTab === 'email' && renderSocialCard(result.email_blurb, 'Email', Mail)}
+                      {activeTab === 'discord' && (
+                        <div className="flex flex-col items-center">
+                          {renderSocialCard(discordPreview || result.discord_preview || result.summary || result.title || "Discord Preview", 'Discord', MessageSquare)}
+                          <div className="mt-8 flex flex-col items-center">
+                            {discordPosted ? (
+                              <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-500/10 px-6 py-3 rounded-2xl border border-emerald-500/20">
+                                <CheckCircle2 className="w-5 h-5" />
+                                Posted to Discord
+                              </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={handlePublishDiscord}
+                                  disabled={isPublishingDiscord}
+                                  className="px-8 py-3 bg-gradient-to-r from-[#5865F2] to-[#4752C4] hover:from-[#4752C4] hover:to-[#3C45A5] disabled:opacity-50 text-white font-bold rounded-2xl transition-all shadow-[0_0_15px_rgba(88,101,242,0.5)] hover:shadow-[0_0_25px_rgba(88,101,242,0.8)] hover:-translate-y-[2px] flex items-center justify-center gap-2"
+                                >
+                                  {isPublishingDiscord ? <Loader2 className="w-5 h-5 animate-spin" /> : "Approve & Post to Discord"}
+                                </button>
+                                {discordPublishError && (
+                                  <p className="mt-3 text-red-400 text-sm font-medium">{discordPublishError}</p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

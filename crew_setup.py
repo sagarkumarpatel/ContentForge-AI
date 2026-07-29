@@ -20,7 +20,13 @@ import time
 import requests
 import urllib.parse
 import base64
+import httpx
 from datetime import datetime
+
+# Disable CrewAI anonymous telemetry and OpenTelemetry export before any
+# crewai/litellm imports so no background threads are ever started.
+os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
+os.environ["OTEL_SDK_DISABLED"] = "true"
 
 # Fix Windows cp1252 terminal: force UTF-8 so Unicode from the LLM doesn't crash
 if hasattr(sys.stdout, 'buffer'):
@@ -48,6 +54,12 @@ def _completion_with_backoff(**kwargs):
             print(f"\n[RATE LIMIT] Waiting {wait:.0f}s then retrying "
                   f"(attempt {attempt + 1}/4)...")
             time.sleep(wait)
+        except (httpx.RemoteProtocolError, httpx.ConnectError, ConnectionResetError) as e:
+            if attempt == 3:
+                raise
+            print(f"\n[CONNECTION ERROR] {type(e).__name__}: {e} -- retrying in 5s "
+                  f"(attempt {attempt + 1}/4)...")
+            time.sleep(5)
 
 litellm.completion = _completion_with_backoff
 
@@ -156,8 +168,8 @@ image_prompt_agent = Agent(
 
 def build_tasks(topic: str):
     t1 = Task(
-        description=f"Analyze the topic '{topic}'. Identify 3-5 concrete research angles worth investigating.",
-        expected_output="A numbered list of 3-5 research angles with a one-line rationale each.",
+        description=f"Analyze the topic '{topic}'. Identify 3-5 concrete research angles worth investigating. Keep output under 100 words total.",
+        expected_output="A numbered list of 3-5 research angles with a one-line rationale each. Under 100 words total.",
         agent=topic_analyzer,
     )
     t2 = Task(
@@ -187,8 +199,8 @@ def build_tasks(topic: str):
         context=[t4],
     )
     t6 = Task(
-        description="Repurpose the polished post into: (1) an engaging 5-7 tweet thread with details, emojis, and hashtags, (2) a detailed LinkedIn post (150-250 words) with rich markdown formatting (headings, bolding, bullet points) and emojis for visual appeal, (3) a comprehensive email newsletter blurb (150-200 words) using attractive formatting and emojis.",
-        expected_output="Three detailed labeled sections with heavy emoji and markdown usage: TWITTER THREAD, LINKEDIN POST, EMAIL BLURB.",
+        description="Repurpose the polished post into: (1) an engaging 5-7 tweet thread (max 100 words total) with details, emojis, and hashtags, (2) a detailed LinkedIn post (max 150 words) with rich markdown formatting (headings, bolding, bullet points) and emojis for visual appeal, (3) a comprehensive email newsletter blurb (max 150 words) using attractive formatting and emojis.",
+        expected_output="Three detailed labeled sections with heavy emoji and markdown usage: TWITTER THREAD, LINKEDIN POST, EMAIL BLURB. Stick to the word limits.",
         agent=designer,
         context=[t5],
     )
@@ -207,69 +219,72 @@ def build_tasks(topic: str):
     return [t1, t2, t3, t4, t5, t6, t7_img, t8]
 
 
-# Image generation (Gemini -> Pollinations fallback)
+# Image generation (Pollinations.ai — primary)
 
 def generate_image(image_prompt: str, img_path: str) -> bool:
-    """Generates a cover image. Tries Hugging Face SDXL first (if HF_API_KEY is set),
-    falls back to Pollinations.ai (free, no key required)."""
+    """Generates a cover image using Pollinations.ai (free, no key required).
+
+    NOTE: Hugging Face SDXL logic is preserved below but commented out
+    because the HF free-tier endpoint is currently unreliable.
+    Re-enable by uncommenting the block and setting HF_API_KEY in .env.
+    """
     success = False
-    hf_key = os.getenv("HF_API_KEY")
 
-    if hf_key:
-        try:
-            print("Generating image with Hugging Face SDXL...")
-            url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-            headers = {"Authorization": f"Bearer {hf_key}"}
-            for attempt in range(3):
-                resp = requests.post(
-                    url,
-                    headers=headers,
-                    json={"inputs": image_prompt},
-                    timeout=90,
-                )
-                if resp.status_code == 503:
-                    wait = resp.json().get("estimated_time", 20)
-                    print(f"HF model loading, waiting {int(min(wait, 30))}s (attempt {attempt+1}/3)...")
-                    time.sleep(min(wait, 30))
-                    continue
-                if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image"):
-                    with open(img_path, "wb") as f:
-                        f.write(resp.content)
-                    success = True
-                    break
-                else:
-                    print(f"Hugging Face API error: {resp.status_code} - {resp.text[:300]}")
-                    break
-        except Exception as e:
-            print(f"Hugging Face generation failed: {e}")
+    # -------------------------------------------------------------------------
+    # HUGGING FACE SDXL (commented out -- not working on free tier)
+    # -------------------------------------------------------------------------
+    # hf_key = os.getenv("HF_API_KEY")
+    #
+    # if hf_key:
+    #     try:
+    #         print("Generating image with Hugging Face SDXL...")
+    #         url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    #         headers = {"Authorization": f"Bearer {hf_key}"}
+    #         for attempt in range(3):
+    #             resp = requests.post(
+    #                 url,
+    #                 headers=headers,
+    #                 json={"inputs": image_prompt},
+    #                 timeout=90,
+    #             )
+    #             if resp.status_code == 503:
+    #                 wait = resp.json().get("estimated_time", 20)
+    #                 print(f"HF model loading, waiting {int(min(wait, 30))}s (attempt {attempt+1}/3)...")
+    #                 time.sleep(min(wait, 30))
+    #                 continue
+    #             if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image"):
+    #                 with open(img_path, "wb") as f:
+    #                     f.write(resp.content)
+    #                 success = True
+    #                 break
+    #             else:
+    #                 print(f"Hugging Face API error: {resp.status_code} - {resp.text[:300]}")
+    #                 break
+    #     except Exception as e:
+    #         print(f"Hugging Face generation failed: {e}")
+    # -------------------------------------------------------------------------
 
-    if not success:
-        print("Generating image with Pollinations.ai...")
-        try:
-            encoded_prompt = urllib.parse.quote(image_prompt)
-            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-            resp = requests.get(url, timeout=60)
-            if resp.status_code == 200:
-                with open(img_path, "wb") as f:
-                    f.write(resp.content)
-                success = True
-            else:
-                print(f"Pollinations API error: {resp.status_code}")
-        except Exception as e:
-            print(f"Pollinations generation failed: {e}")
+    print("Generating image with Pollinations.ai...")
+    try:
+        encoded_prompt = urllib.parse.quote(image_prompt)
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+        resp = requests.get(url, timeout=60)
+        if resp.status_code == 200:
+            with open(img_path, "wb") as f:
+                f.write(resp.content)
+            success = True
+        else:
+            print(f"Pollinations API error: {resp.status_code}")
+    except Exception as e:
+        print(f"Pollinations generation failed: {e}")
 
     return success
 
 
 # Discord auto-post
 
-def post_to_discord(text_content: str, image_path: str | None = None) -> bool:
-    """Posts the final content (and optional image) to a Discord channel via webhook."""
-    if not DISCORD_WEBHOOK_URL:
-        print("No DISCORD_WEBHOOK_URL set in .env -- skipping Discord post.")
-        return False
-
-    # Try to parse the raw JSON to format a beautiful Discord message
+def build_discord_message(text_content: str) -> str:
+    """Extracts title, summary, and linkedin_post from the JSON text to build a Discord message string."""
     try:
         raw_str = text_content.strip()
         if raw_str.startswith("```json"):
@@ -290,10 +305,19 @@ def post_to_discord(text_content: str, image_path: str | None = None) -> bool:
         if linkedin_post:
             message += f"💡 **Preview:**\n{linkedin_post}\n"
             
-        message = message[:4000] # Embed descriptions can be up to 4096 chars
+        return message[:4000] # Embed descriptions can be up to 4096 chars
     except Exception:
         # Fallback to raw text if parsing fails
-        message = text_content[:4000]
+        return text_content[:4000]
+
+
+def post_to_discord(text_content: str, image_path: str | None = None) -> bool:
+    """Posts the final content (and optional image) to a Discord channel via webhook."""
+    if not DISCORD_WEBHOOK_URL:
+        print("No DISCORD_WEBHOOK_URL set in .env -- skipping Discord post.")
+        return False
+
+    message = build_discord_message(text_content)
 
     try:
         if image_path and os.path.exists(image_path):
@@ -340,6 +364,11 @@ def run(topic: str):
         process=Process.sequential,
         verbose=True,
     )
+    
+    print("\n--- Model Configuration ---")
+    print(f"Fast LLM (Topic Analyzer, SEO, Designer): {llm_fast.model}")
+    print(f"Main LLM (Research, Writer, Editor, Publisher, Image Prompt): {llm.model}")
+    print("---------------------------\n")
 
     result = crew.kickoff()
 
@@ -357,8 +386,6 @@ def run(topic: str):
 
     if img_success:
         print(f"Image saved to {img_path}")
-
-    post_to_discord(str(result), img_path if img_success else None)
 
     return result
 

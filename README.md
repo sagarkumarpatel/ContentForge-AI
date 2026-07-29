@@ -1,6 +1,6 @@
 # 🤖 ContentForge-AI
 
-A stunning **Next.js & FastAPI web application** powered by an **8-agent AI pipeline** built with [CrewAI](https://crewai.com). It takes any topic and automatically produces a complete, publish-ready content package — including a blog post, Twitter thread, LinkedIn post, an email blurb, and a generated cover image. You can then review and **manually approve** posting to Discord with a single click.
+A stunning **Next.js & FastAPI web application** powered by an **8-agent AI pipeline** built with [CrewAI](https://crewai.com). It takes any topic and automatically produces a complete, publish-ready content package — including a blog post, Twitter thread, LinkedIn post, an email blurb, and a cover image (either AI-generated or custom-uploaded). You can then review and **manually approve** posting to Discord with a single click.
 
 Runs efficiently using a dual-model approach with [Groq](https://console.groq.com) (Llama 3.3 70B & Llama 3.1 8B), [Serper](https://serper.dev) for web search, and [Pollinations.ai](https://pollinations.ai) for cover image generation (free, no key required).
 
@@ -12,9 +12,12 @@ Runs efficiently using a dual-model approach with [Groq](https://console.groq.co
 - **Persistent Session History**: A responsive left sidebar saves all your previous generated sessions using local storage — never lose past content.
 - **FastAPI Backend with SSE Streaming**: A robust Python backend that runs the CrewAI pipeline and streams real-time logs to the frontend as they happen.
 - **8 Autonomous Agents**: Specialized AI agents handle Topic Analysis, Research, SEO, Writing, Editing, Social Media adaptation, Image Prompting, and Publishing — all running sequentially.
-- **Free Image Generation**: Automatically creates a vivid, descriptive prompt and generates a 1024×1024 cover image via [Pollinations.ai](https://pollinations.ai) — completely free, no API key needed.
+- **Custom Image Upload & Free AI Image Generation**: 
+  - **Custom Image Upload**: Attach your own custom image in the prompt bar to bypass AI image generation and use your image across all social cards and Discord posts.
+  - **AI Generation**: If no image is provided, automatically generates a 1024×1024 cover image via [Pollinations.ai](https://pollinations.ai) (free, no API key needed).
 - **Approval-Gated Discord Posting**: After content is generated, a dedicated **Discord** tab shows you an exact preview of the embed (title + summary + LinkedIn preview) before you post. Click **"Approve & Post to Discord"** to publish — nothing is ever sent automatically.
-- **Resilient LLM Calls**: A custom retry wrapper handles Groq free-tier rate limits (with smart wait-time parsing) *and* transient network drops (`ConnectionResetError`, `httpx.ConnectError`) with automatic backoff — so a flaky connection won't kill your run.
+- **Robust JSON Control Character Parsing**: Backend (`json.loads(strict=False)` + re-serialization) and frontend fallback sanitization prevent string literal control-character errors (`\n`, `\t`) when parsing multiline LLM output.
+- **Resilient LLM Calls**: A custom retry wrapper handles Groq free-tier rate limits (with smart wait-time parsing) *and* transient network socket drops (`ConnectionResetError`, `httpx.ConnectError`) with automatic backoff — so a flaky connection won't kill your run.
 - **Free & Lightning Fast**: Powered by Groq's LPU inference. Fast 8B models handle simpler tasks (Topic Analyzer, SEO, Designer); the powerful 70B model handles complex reasoning and writing.
 
 ---
@@ -23,15 +26,17 @@ Runs efficiently using a dual-model approach with [Groq](https://console.groq.co
 
 - [What It Does](#what-it-does)
 - [How It Works — The 8-Agent Pipeline](#how-it-works--the-8-agent-pipeline)
+- [API Endpoints](#api-endpoints)
 - [Project Structure](#project-structure)
 - [Setup & Installation](#setup--installation)
 - [Running the Application](#running-the-application)
+- [Discord Approval Flow](#discord-approval-flow)
 
 ---
 
 ## 🎯 What It Does
 
-Enter a topic in the UI (e.g., *"The impact of AI agents on small business productivity"*), and watch live as the agents stream their progress in the terminal widget. The system ultimately generates:
+Enter a topic in the UI (e.g., *"The impact of AI agents on small business productivity"*), optionally attach a custom cover image, and watch live as the agents stream their progress in the terminal widget. The system ultimately generates:
 
 | Output | Description |
 |--------|-------------|
@@ -43,7 +48,7 @@ Enter a topic in the UI (e.g., *"The impact of AI agents on small business produ
 | 🐦 Twitter thread | 5–7 tweet thread with hashtags & emojis |
 | 💼 LinkedIn post | Professional post (up to 150 words) |
 | 📧 Email blurb | Newsletter snippet (up to 150 words) |
-| 🎨 Cover image | 1024×1024 image generated via Pollinations.ai |
+| 🎨 Cover image | Custom-uploaded image OR AI 1024×1024 image via Pollinations.ai |
 | 💬 Discord preview | Exact embed preview (title + summary + LinkedIn) before posting |
 
 *All outputs are displayed in the UI, saved to your browser's persistent history, saved locally in the `outputs/` folder, and optionally published to Discord after your explicit approval.*
@@ -67,24 +72,37 @@ The system runs agents **sequentially** — each agent receives the output of th
 
 ---
 
+## 🔌 API Endpoints
+
+The FastAPI backend exposes the following endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/generate` | `POST` | Accepts `{ topic, image_path? }` and returns an SSE event stream of execution logs and completion payload. |
+| `/upload-image` | `POST` | Accepts a multipart image file (`UploadFile`) and saves it to `outputs/` for use in generation. |
+| `/publish-discord` | `POST` | Accepts `{ content, image_path? }` and posts the formatted embed to the configured Discord Webhook. |
+| `/outputs/*` | `GET` | Static file mount serving generated cover images and Markdown outputs. |
+
+---
+
 ## 📂 Project Structure
 
 ```
 agent_project/
 │
-├── api.py                 # FastAPI backend (SSE streaming, /generate, /publish-discord)
-├── crew_setup.py          # CrewAI pipeline (agents, tasks, image gen, Discord posting)
+├── api.py                 # FastAPI backend (SSE streaming, /generate, /upload-image, /publish-discord)
+├── crew_setup.py          # CrewAI pipeline (8 agents, custom image handling, Pollinations image gen, Discord posting)
 ├── run_app.bat            # Windows script to launch both frontend and backend
 ├── requirements.txt       # Python backend dependencies
 ├── .env                   # Your API keys (never commit this!)
 │
 ├── frontend/              # Next.js React application
 │   ├── app/
-│   │   ├── page.tsx       # Main UI: SSE streaming, tabs, Discord approve flow, sidebar
+│   │   ├── page.tsx       # Main UI: custom image picker, SSE streaming, tabs, Discord approve flow, sidebar
 │   │   ├── globals.css    # Global styles & glassmorphism effects
 │   ├── package.json       # Node.js frontend dependencies
 │
-├── outputs/               # Generated Markdown files & PNG cover images
+├── outputs/               # Generated Markdown files, user uploads, & cover PNG images
 │
 └── venv/                  # Python virtual environment
 ```

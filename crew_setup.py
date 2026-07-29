@@ -354,9 +354,10 @@ def post_to_discord(text_content: str, image_path: str | None = None) -> bool:
         return False
 
 
-# Main run
+import shutil
+import argparse
 
-def run(topic: str):
+def run(topic: str, custom_image_path: str | None = None):
     tasks = build_tasks(topic)
     crew = Crew(
         agents=[topic_analyzer, researcher, seo_agent, writer, editor, designer, image_prompt_agent, publisher],
@@ -380,16 +381,29 @@ def run(topic: str):
 
     print(f"\nDone! Full output saved to {out_path}")
 
-    image_prompt = str(getattr(tasks[6].output, 'raw', tasks[6].output))
     img_path = f"outputs/cover_{stamp}.png"
-    img_success = generate_image(image_prompt, img_path)
-
-    if img_success:
-        print(f"Image saved to {img_path}")
+    
+    if custom_image_path and os.path.exists(custom_image_path):
+        print(f"\n[CUSTOM IMAGE] Using user-uploaded image from {custom_image_path} (skipping auto-generation).")
+        try:
+            shutil.copy(custom_image_path, img_path)
+            print(f"Image saved to {img_path}")
+        except Exception as e:
+            print(f"Error copying custom image: {e}")
+    else:
+        image_prompt = str(getattr(tasks[6].output, 'raw', tasks[6].output))
+        img_success = generate_image(image_prompt, img_path)
+        if img_success:
+            print(f"Image saved to {img_path}")
 
     return result
 
 
 if __name__ == "__main__":
-    topic_arg = " ".join(sys.argv[1:]) or "The future of AI agents in daily productivity"
-    run(topic_arg)
+    parser = argparse.ArgumentParser(description="Run ContentForge Crew")
+    parser.add_argument("topic", nargs="*", help="Topic for content generation")
+    parser.add_argument("--image", help="Optional path to custom user uploaded image")
+    args = parser.parse_args()
+
+    topic_str = " ".join(args.topic) if args.topic else "The future of AI agents in daily productivity"
+    run(topic_str, custom_image_path=args.image)

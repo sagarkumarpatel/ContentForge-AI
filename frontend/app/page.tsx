@@ -2,7 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Loader2, CheckCircle2, Copy, Terminal, AlignLeft, Share2, Briefcase, Mail, Sparkles, Check, Menu, X, Trash2, Edit2, Plus, MessageSquare, Clock, LayoutDashboard, GitBranch, Settings, BarChart2, ChevronDown, ChevronUp, Wrench } from "lucide-react";
+import {
+  Search, Loader2, CheckCircle2, Copy, AlignLeft, Share2, Briefcase, Mail,
+  Sparkles, Check, Menu, X, Trash2, Edit2, Plus, MessageSquare, Clock,
+  LayoutDashboard, GitBranch, Settings, BarChart2, ChevronDown, ChevronUp, Wrench,
+  Upload, Image as ImageIcon
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Session {
@@ -16,84 +21,95 @@ interface Session {
 }
 
 const AGENTS = [
-  { id: "Topic Analyzer", icon: Search, desc: "Identifies research angles" },
-  { id: "Research Agent", icon: Search, desc: "Gathers facts & stats" },
-  { id: "SEO Agent", icon: AlignLeft, desc: "Builds keyword outline" },
-  { id: "Writer Agent", icon: AlignLeft, desc: "Drafts the blog post" },
-  { id: "Editor Agent", icon: CheckCircle2, desc: "Polishes the draft" },
-  { id: "Designer Agent", icon: Share2, desc: "Repurposes for social" },
-  { id: "Publisher Agent", icon: Mail, desc: "Compiles final package" },
+  { id: "Topic Analyzer",  icon: Search,       desc: "Identifies research angles" },
+  { id: "Research Agent",  icon: Search,       desc: "Gathers facts & stats" },
+  { id: "SEO Agent",       icon: AlignLeft,    desc: "Builds keyword outline" },
+  { id: "Writer Agent",    icon: AlignLeft,    desc: "Drafts the blog post" },
+  { id: "Editor Agent",    icon: CheckCircle2, desc: "Polishes the draft" },
+  { id: "Designer Agent",  icon: Share2,       desc: "Repurposes for social" },
+  { id: "Publisher Agent", icon: Mail,         desc: "Compiles final package" },
 ];
 
 export default function Home() {
-  const [topic, setTopic] = useState("");
-  const [isRunning, setIsRunning] = useState(false);
-  const [activeAgent, setActiveAgent] = useState<string | null>(null);
-  const [completedAgents, setCompletedAgents] = useState<string[]>([]);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [result, setResult] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState("blog");
-  const [copiedTab, setCopiedTab] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [discordPosted, setDiscordPosted] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  const [topic,               setTopic]               = useState("");
+  const [isRunning,           setIsRunning]           = useState(false);
+  const [activeAgent,         setActiveAgent]         = useState<string | null>(null);
+  const [completedAgents,     setCompletedAgents]     = useState<string[]>([]);
+  const [logs,                setLogs]                = useState<string[]>([]);
+  const [result,              setResult]              = useState<any>(null);
+  const [activeTab,           setActiveTab]           = useState("blog");
+  const [copiedTab,           setCopiedTab]           = useState<string | null>(null);
+  const [imageUrl,            setImageUrl]            = useState<string | null>(null);
+  const [discordPosted,       setDiscordPosted]       = useState(false);
+  const [imageError,          setImageError]          = useState(false);
   const [isPublishingDiscord, setIsPublishingDiscord] = useState(false);
   const [discordPublishError, setDiscordPublishError] = useState<string | null>(null);
-  const [discordPreview, setDiscordPreview] = useState<string | null>(null);
-  const [agentStates, setAgentStates] = useState<Record<string, { status: string, usingTool: boolean }>>({});
-  const [showRawLogs, setShowRawLogs] = useState(false);
+  const [discordPreview,      setDiscordPreview]      = useState<string | null>(null);
+  const [agentStates,         setAgentStates]         = useState<Record<string, { status: string; usingTool: boolean }>>({});
+  const [showRawLogs,         setShowRawLogs]         = useState(false);
+
+  // Custom User Image State
+  const [customImageFile,     setCustomImageFile]     = useState<File | null>(null);
+  const [customImagePreview,  setCustomImagePreview]  = useState<string | null>(null);
+  const fileInputRef                                  = useRef<HTMLInputElement>(null);
 
   // Sidebar & History State
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sessions,         setSessions]         = useState<Session[]>([]);
+  const [activeSessionId,  setActiveSessionId]  = useState<string | null>(null);
+  const [isSidebarOpen,    setIsSidebarOpen]    = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [editTopicValue, setEditTopicValue] = useState("");
-  const [particles, setParticles] = useState<{ id: number, x: number, duration: number, delay: number, size: number }[]>([]);
+  const [editTopicValue,   setEditTopicValue]   = useState("");
+  const [particles,        setParticles]        = useState<{ id: number; x: number; duration: number; delay: number; size: number }[]>([]);
 
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsEndRef  = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const adjustTextareaHeight = () => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 250)}px`;
     }
   };
 
-  // Initialize particles
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setCustomImageFile(file);
+      setCustomImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const removeCustomImage = () => {
+    setCustomImageFile(null);
+    setCustomImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   useEffect(() => {
-    const newParticles = Array.from({ length: 30 }).map((_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      duration: 10 + Math.random() * 20,
-      delay: Math.random() * 10,
-      size: Math.random() * 3 + 1
-    }));
-    setParticles(newParticles);
+    setParticles(
+      Array.from({ length: 30 }).map((_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        duration: 10 + Math.random() * 20,
+        delay: Math.random() * 10,
+        size: Math.random() * 3 + 1,
+      }))
+    );
   }, []);
 
-  // Load from local storage on mount
   useEffect(() => {
     const saved = localStorage.getItem("contentForgeSessions");
     if (saved) {
-      try {
-        setSessions(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse sessions", e);
-      }
+      try { setSessions(JSON.parse(saved)); } catch {}
     }
   }, []);
 
-  // Save to local storage on update
   useEffect(() => {
     localStorage.setItem("contentForgeSessions", JSON.stringify(sessions));
   }, [sessions]);
 
   useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -115,22 +131,39 @@ export default function Home() {
     if (window.innerWidth < 768) setIsSidebarOpen(false);
 
     try {
+      let uploadedImagePath: string | null = null;
+
+      if (customImageFile) {
+        try {
+          const formData = new FormData();
+          formData.append("file", customImageFile);
+          const uploadResp = await fetch("http://localhost:8000/upload-image", {
+            method: "POST",
+            body: formData,
+          });
+          if (uploadResp.ok) {
+            const uploadData = await uploadResp.json();
+            uploadedImagePath = uploadData.image_path;
+          }
+        } catch (err) {
+          console.error("Failed to upload custom image:", err);
+        }
+      }
+
       const response = await fetch("http://localhost:8000/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic }),
+        body: JSON.stringify({ topic, image_path: uploadedImagePath }),
       });
 
       if (!response.body) throw new Error("No readable stream available");
 
-      const reader = response.body.getReader();
+      const reader  = response.body.getReader();
       const decoder = new TextDecoder();
-
-      let finalResult = null;
-      let finalImageUrl = null;
+      let finalResult        = null;
+      let finalImageUrl      = null;
       let finalDiscordPosted = false;
-      let finalDiscordPreview = null;
-
+      let finalDiscordPreview: string | null = null;
       let currentActiveAgent: string | null = "Topic Analyzer";
 
       while (true) {
@@ -138,70 +171,77 @@ export default function Home() {
         if (done) break;
 
         const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
+        for (const line of chunk.split("\n")) {
+          if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
 
-              if (data.type === 'log') {
+              if (data.type === "log") {
                 const logContent = data.content;
                 setLogs(prev => [...prev, logContent]);
 
-                const cleanLog = logContent.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
+                const cleanLog = logContent
+                  .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
+                  .trim();
 
-                const agentMatch = cleanLog.match(/Working Agent: (.*?)(?:\s|$)/i) || cleanLog.match(/# Agent:\s*(.*?)$/i) || cleanLog.match(/Agent: (.*?)(?:\s|$)/i);
+                const agentMatch =
+                  cleanLog.match(/Working Agent: (.*?)(?:\s|$)/i) ||
+                  cleanLog.match(/# Agent:\s*(.*?)$/i) ||
+                  cleanLog.match(/Agent: (.*?)(?:\s|$)/i);
+
                 if (agentMatch) {
-                  const agentName = agentMatch[1].trim();
-                  const matchedAgent = AGENTS.find(a => a.id.includes(agentName) || agentName.includes(a.id.split(" ")[0]));
-
+                  const agentName    = agentMatch[1].trim();
+                  const matchedAgent = AGENTS.find(
+                    a => a.id.includes(agentName) || agentName.includes(a.id.split(" ")[0])
+                  );
                   if (matchedAgent && matchedAgent.id !== currentActiveAgent) {
-                    if (currentActiveAgent) {
+                    if (currentActiveAgent)
                       setCompletedAgents(prev => [...new Set([...prev, currentActiveAgent!])].filter(Boolean));
-                    }
                     currentActiveAgent = matchedAgent.id;
                     setActiveAgent(currentActiveAgent);
-                    
                     setAgentStates(prev => ({
-                        ...prev,
-                        [currentActiveAgent!]: { status: "Starting task...", usingTool: false }
+                      ...prev,
+                      [currentActiveAgent!]: { status: "Starting task...", usingTool: false },
                     }));
                   }
                 }
-                
+
                 if (currentActiveAgent) {
-                   let updatedStatus = null;
-                   let usingTool = false;
+                  let updatedStatus: string | null = null;
+                  let usingTool = false;
+                  if      (cleanLog.includes("Thought:"))      { updatedStatus = cleanLog.split("Thought:")[1].trim(); }
+                  else if (cleanLog.includes("Using tool:"))   { updatedStatus = cleanLog.split("Using tool:")[1].trim(); usingTool = true; }
+                  else if (cleanLog.includes("Action:"))       { updatedStatus = "Tool: " + cleanLog.split("Action:")[1].trim(); usingTool = true; }
+                  else if (cleanLog.includes("Task:"))         { updatedStatus = "Analyzing task requirements..."; }
+                  else if (cleanLog.includes("Final Answer:")) { updatedStatus = "Finalizing output..."; }
 
-                   if (cleanLog.includes("Thought:")) {
-                     updatedStatus = cleanLog.split("Thought:")[1].trim();
-                   } else if (cleanLog.includes("Using tool:")) {
-                     updatedStatus = cleanLog.split("Using tool:")[1].trim();
-                     usingTool = true;
-                   } else if (cleanLog.includes("Action:")) {
-                     updatedStatus = "Tool: " + cleanLog.split("Action:")[1].trim();
-                     usingTool = true;
-                   } else if (cleanLog.includes("Task:")) {
-                     updatedStatus = "Analyzing task requirements...";
-                   } else if (cleanLog.includes("Final Answer:")) {
-                     updatedStatus = "Finalizing output...";
-                   }
-
-                   if (updatedStatus) {
-                     // truncate if too long
-                     if (updatedStatus.length > 60) updatedStatus = updatedStatus.substring(0, 60) + "...";
-                     setAgentStates(prev => ({
-                        ...prev,
-                        [currentActiveAgent!]: { status: updatedStatus!, usingTool }
-                     }));
-                   }
+                  if (updatedStatus) {
+                    if (updatedStatus.length > 60) updatedStatus = updatedStatus.substring(0, 60) + "...";
+                    setAgentStates(prev => ({
+                      ...prev,
+                      [currentActiveAgent!]: { status: updatedStatus!, usingTool },
+                    }));
+                  }
                 }
-              } else if (data.type === 'complete') {
+              } else if (data.type === "complete") {
                 try {
-                  finalResult = JSON.parse(data.content);
-                  finalImageUrl = data.image_url || null;
-                  finalDiscordPosted = !!data.discord_posted;
+                  const rawContent = data.content;
+                  let parsedResult = null;
+                  try {
+                    parsedResult = JSON.parse(rawContent);
+                  } catch (e) {
+                    const sanitized = rawContent.replace(/[\u0000-\u001F\u007F-\u009F]/g, (match: string) => {
+                      if (match === "\n") return "\\n";
+                      if (match === "\r") return "\\r";
+                      if (match === "\t") return "\\t";
+                      return "";
+                    });
+                    parsedResult = JSON.parse(sanitized);
+                  }
+
+                  finalResult         = parsedResult;
+                  finalImageUrl       = data.image_url || null;
+                  finalDiscordPosted  = !!data.discord_posted;
                   finalDiscordPreview = data.discord_preview || null;
 
                   setResult(finalResult);
@@ -209,19 +249,13 @@ export default function Home() {
                   setDiscordPosted(finalDiscordPosted);
                   setDiscordPreview(finalDiscordPreview);
 
-                  // Create new session
                   const newSession: Session = {
-                    id: Date.now().toString(),
-                    topic,
-                    date: Date.now(),
-                    result: finalResult,
-                    imageUrl: finalImageUrl,
-                    discordPosted: finalDiscordPosted,
-                    discordPreview: finalDiscordPreview
+                    id: Date.now().toString(), topic, date: Date.now(),
+                    result: finalResult, imageUrl: finalImageUrl,
+                    discordPosted: finalDiscordPosted, discordPreview: finalDiscordPreview,
                   };
                   setSessions(prev => [newSession, ...prev]);
                   setActiveSessionId(newSession.id);
-
                 } catch (e) {
                   console.error("Failed to parse result JSON", e);
                   setLogs(prev => [...prev, "Error parsing final JSON"]);
@@ -229,14 +263,12 @@ export default function Home() {
                 setIsRunning(false);
                 setActiveAgent(null);
                 setCompletedAgents(AGENTS.map(a => a.id));
-              } else if (data.type === 'error') {
+              } else if (data.type === "error") {
                 setLogs(prev => [...prev, "ERROR: " + data.content]);
                 setIsRunning(false);
                 setActiveAgent(null);
               }
-            } catch (e) {
-              // Ignore incomplete chunks
-            }
+            } catch {}
           }
         }
       }
@@ -254,10 +286,7 @@ export default function Home() {
       const response = await fetch("http://localhost:8000/publish-discord", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: JSON.stringify(result),
-          image_path: imageUrl
-        }),
+        body: JSON.stringify({ content: JSON.stringify(result), image_path: imageUrl }),
       });
       const data = await response.json();
       if (data.posted) {
@@ -291,24 +320,18 @@ export default function Home() {
   };
 
   const startNewSession = () => {
-    setTopic("");
-    setResult(null);
-    setImageUrl(null);
-    setDiscordPosted(false);
-    setDiscordPreview(null);
-    setActiveSessionId(null);
-    setLogs([]);
-    setAgentStates({});
-    setShowRawLogs(false);
+    setTopic(""); setResult(null); setImageUrl(null);
+    setDiscordPosted(false); setDiscordPreview(null);
+    setActiveSessionId(null); setLogs([]);
+    setAgentStates({}); setShowRawLogs(false);
+    removeCustomImage();
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
   const deleteSession = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setSessions(prev => prev.filter(s => s.id !== id));
-    if (activeSessionId === id) {
-      startNewSession();
-    }
+    if (activeSessionId === id) startNewSession();
   };
 
   const startEditSession = (e: React.MouseEvent, session: Session) => {
@@ -326,14 +349,13 @@ export default function Home() {
   };
 
   const renderSocialCard = (rawContent: any, platform: string, icon: any) => {
-    const Icon = icon;
-    const content = Array.isArray(rawContent) ? rawContent.join('\n\n') : String(rawContent || "");
-
+    const Icon    = icon;
+    const content = Array.isArray(rawContent) ? rawContent.join("\n\n") : String(rawContent || "");
     return (
       <div className="glass-card rounded-3xl overflow-hidden max-w-2xl mx-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent">
         {imageUrl && !imageError && (
           <img
-            src={imageUrl.startsWith('http') ? imageUrl : `http://localhost:8000${imageUrl}`}
+            src={imageUrl.startsWith("http") ? imageUrl : `http://localhost:8000${imageUrl}`}
             alt={`${platform} Cover`}
             onError={() => setImageError(true)}
             className="w-full h-48 md:h-64 object-cover border-b border-white/5"
@@ -344,7 +366,7 @@ export default function Home() {
             <Icon className="w-5 h-5 drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
             <span className="drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]">{platform} Preview</span>
           </div>
-          <div className="prose prose-invert prose-indigo prose-p:leading-loose prose-p:text-[17px] prose-p:text-zinc-200 prose-headings:text-white prose-headings:font-black prose-li:text-zinc-200 prose-li:text-[17px] max-w-none font-sans prose-strong:text-indigo-300">
+          <div className="prose prose-invert prose-indigo prose-p:leading-loose prose-p:text-[17px] prose-p:text-zinc-300 prose-headings:text-white prose-headings:font-black prose-li:text-zinc-300 prose-li:text-[17px] max-w-none font-sans prose-strong:text-indigo-300">
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
         </div>
@@ -354,17 +376,20 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-[#05070E] text-zinc-100 selection:bg-indigo-500/30 font-sans overflow-hidden">
-      
+
       {/* --- BACKGROUND EFFECTS --- */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-gradient-to-br from-[#0B0F19] to-[#05070E]" />
-        
+
         {/* Hexagon Grid SVG Overlay */}
-        <div 
-          className="absolute inset-0 opacity-[0.03]" 
-          style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'100\' viewBox=\'0 0 60 100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg stroke=\'%23ffffff\' stroke-width=\'1\' fill=\'none\' fill-rule=\'evenodd\'%3E%3Cpath d=\'M30 100V50l25.98-15v-30L30 20 4.02 5v30L30 50\'/%3E%3Cpath d=\'M30 0v50L4.02 65v30L30 80l25.98 15V65\'/%3E%3C/g%3E%3C/svg%3E")', backgroundSize: '60px' }} 
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'100\' viewBox=\'0 0 60 100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg stroke=\'%23ffffff\' stroke-width=\'1\' fill=\'none\' fill-rule=\'evenodd\'%3E%3Cpath d=\'M30 100V50l25.98-15v-30L30 20 4.02 5v30L30 50\'/%3E%3Cpath d=\'M30 0v50L4.02 65v30L30 80l25.98 15V65\'/%3E%3C/g%3E%3C/svg%3E")',
+            backgroundSize: "60px",
+          }}
         />
-        
+
         {/* Nebula Gradients */}
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[150px]" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[150px]" />
@@ -372,16 +397,16 @@ export default function Home() {
 
         {/* Particles */}
         {particles.map(p => (
-          <div 
+          <div
             key={p.id}
             className="particle"
             style={{
               left: `${p.x}%`,
-              width: `${p.size}px`,
+              width:  `${p.size}px`,
               height: `${p.size}px`,
               animationDuration: `${p.duration}s`,
-              animationDelay: `${p.delay}s`,
-              boxShadow: `0 0 ${p.size * 2}px rgba(255, 255, 255, 0.8)`
+              animationDelay:    `${p.delay}s`,
+              boxShadow: `0 0 ${p.size * 2}px rgba(255, 255, 255, 0.8)`,
             }}
           />
         ))}
@@ -391,9 +416,7 @@ export default function Home() {
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setIsSidebarOpen(false)}
             className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
           />
@@ -401,7 +424,7 @@ export default function Home() {
       </AnimatePresence>
 
       <aside
-        className={`fixed md:relative z-50 w-72 h-full glass border-r-0 border-white/5 flex flex-col transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed md:relative z-50 w-72 h-full glass border-r-0 border-white/5 flex flex-col transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -420,13 +443,20 @@ export default function Home() {
         {/* Navigation Links */}
         <div className="px-4 py-2 space-y-1">
           {[
-            { icon: LayoutDashboard, label: 'Dashboard', active: true },
-            { icon: GitBranch, label: 'Workflows' },
-            { icon: Clock, label: 'History' },
-            { icon: BarChart2, label: 'Analytics' },
-            { icon: Settings, label: 'Settings' },
+            { icon: LayoutDashboard, label: "Dashboard", active: true },
+            { icon: GitBranch,       label: "Workflows" },
+            { icon: Clock,           label: "History" },
+            { icon: BarChart2,       label: "Analytics" },
+            { icon: Settings,        label: "Settings" },
           ].map(item => (
-            <button key={item.label} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${item.active ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 shadow-[inset_4px_0_0_rgba(99,102,241,0.8)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}>
+            <button
+              key={item.label}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                item.active
+                  ? "bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 shadow-[inset_4px_0_0_rgba(99,102,241,0.8)]"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+              }`}
+            >
               <item.icon className="w-4 h-4" />
               {item.label}
             </button>
@@ -440,9 +470,9 @@ export default function Home() {
               <Plus className="w-4 h-4" />
             </button>
           </div>
-          
+
           {sessions.length === 0 ? (
-             <div className="text-center p-4 text-zinc-600 text-sm mt-4">
+            <div className="text-center p-4 text-zinc-600 text-sm mt-4">
               <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-20" />
               <p>No history</p>
             </div>
@@ -452,7 +482,11 @@ export default function Home() {
                 <div
                   key={session.id}
                   onClick={() => loadSession(session)}
-                  className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${activeSessionId === session.id ? 'bg-indigo-500/20 text-indigo-100 border border-indigo-500/30 shadow-[0_0_10px_rgba(99,102,241,0.1)]' : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200'}`}
+                  className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${
+                    activeSessionId === session.id
+                      ? "bg-indigo-500/20 text-indigo-100 border border-indigo-500/30 shadow-[0_0_10px_rgba(99,102,241,0.1)]"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+                  }`}
                 >
                   <div className="flex items-center gap-3 overflow-hidden flex-1">
                     {editingSessionId === session.id ? (
@@ -461,21 +495,19 @@ export default function Home() {
                         value={editTopicValue}
                         onChange={e => setEditTopicValue(e.target.value)}
                         onBlur={() => saveEditSession(session.id)}
-                        onKeyDown={e => e.key === 'Enter' && saveEditSession(session.id)}
+                        onKeyDown={e => e.key === "Enter" && saveEditSession(session.id)}
                         onClick={e => e.stopPropagation()}
                         className="flex-1 bg-black/50 border border-indigo-500/50 rounded px-2 py-0.5 text-sm outline-none text-white w-full min-w-0"
                       />
                     ) : (
-                      <div className="truncate text-sm font-medium w-full min-w-0">
-                        {session.topic}
-                      </div>
+                      <div className="truncate text-sm font-medium w-full min-w-0">{session.topic}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2 shrink-0">
-                    <button onClick={(e) => startEditSession(e, session)} className="p-1 text-zinc-500 hover:text-indigo-300 rounded transition-colors">
+                    <button onClick={e => startEditSession(e, session)} className="p-1 text-zinc-500 hover:text-indigo-300 rounded transition-colors">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={(e) => deleteSession(e, session.id)} className="p-1 text-zinc-500 hover:text-red-400 rounded transition-colors">
+                    <button onClick={e => deleteSession(e, session.id)} className="p-1 text-zinc-500 hover:text-red-400 rounded transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -514,7 +546,7 @@ export default function Home() {
           </motion.div>
 
           {/* 7-Node Network Animation */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2, duration: 0.5 }}
@@ -522,33 +554,37 @@ export default function Home() {
           >
             <div className="flex flex-wrap justify-center items-center gap-4 md:gap-6">
               {AGENTS.map((agent, i) => {
-                const isActive = activeAgent === agent.id;
+                const isActive   = activeAgent === agent.id;
                 const isComplete = completedAgents.includes(agent.id);
-                
                 return (
                   <div key={agent.id} className="flex items-center">
                     <div className="flex flex-col items-center gap-2 group cursor-default">
                       <div className={`
                         w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center transition-all duration-500
-                        ${isActive 
-                          ? 'bg-indigo-500/20 border-2 border-indigo-400 text-indigo-300 shadow-[0_0_20px_rgba(99,102,241,0.6)] scale-110' 
-                          : isComplete 
-                            ? 'bg-cyan-500/10 border border-cyan-500/50 text-cyan-400' 
-                            : 'glass text-zinc-500 group-hover:bg-white/5'}
-                      `}>
+                        ${isActive
+                          ? "bg-indigo-500/20 border-2 border-indigo-400 text-indigo-300 shadow-[0_0_20px_rgba(99,102,241,0.6)] scale-110"
+                          : isComplete
+                            ? "bg-cyan-500/10 border border-cyan-500/50 text-cyan-400"
+                            : "glass text-zinc-500 group-hover:bg-white/5"
+                        }`}
+                      >
                         <agent.icon className="w-5 h-5 md:w-6 md:h-6" />
                       </div>
-                      <span className={`text-[10px] md:text-xs font-medium uppercase tracking-widest ${isActive ? 'text-indigo-300 drop-shadow-[0_0_5px_rgba(165,180,252,0.8)]' : isComplete ? 'text-cyan-400' : 'text-zinc-500'}`}>
-                        {agent.id.split(' ')[0]}
+                      <span className={`text-[10px] md:text-xs font-medium uppercase tracking-widest ${
+                        isActive ? "text-indigo-300 drop-shadow-[0_0_5px_rgba(165,180,252,0.8)]"
+                          : isComplete ? "text-cyan-400"
+                          : "text-zinc-500"
+                      }`}>
+                        {agent.id.split(" ")[0]}
                       </span>
                     </div>
                     {i < AGENTS.length - 1 && (
                       <div className="hidden md:block w-8 h-[2px] mx-2 relative overflow-hidden rounded-full bg-white/5">
                         {(isActive || isComplete) && (
-                          <motion.div 
+                          <motion.div
                             className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-cyan-400"
-                            initial={{ x: '-100%' }}
-                            animate={{ x: isComplete ? '0%' : ['-100%', '100%'] }}
+                            initial={{ x: "-100%" }}
+                            animate={{ x: isComplete ? "0%" : ["-100%", "100%"] }}
                             transition={{ duration: isComplete ? 0.3 : 1.5, repeat: isComplete ? 0 : Infinity }}
                           />
                         )}
@@ -569,29 +605,66 @@ export default function Home() {
               onSubmit={handleGenerate}
               className="relative max-w-3xl mx-auto mb-16"
             >
-              <div className={`relative rounded-3xl glass transition-all duration-300 ${isRunning ? 'opacity-50 pointer-events-none' : 'hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]'} flex flex-col p-2`}>
+              <div className={`relative rounded-3xl glass transition-all duration-300 ${isRunning ? "opacity-50 pointer-events-none" : "hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]"} flex flex-col p-2`}>
                 <textarea
                   ref={textareaRef}
                   value={topic}
-                  onChange={(e) => {
-                    setTopic(e.target.value);
-                    adjustTextareaHeight();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                  onChange={e => { setTopic(e.target.value); adjustTextareaHeight(); }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      if (topic.trim() && !isRunning) {
-                        handleGenerate(e);
-                      }
+                      if (topic.trim() && !isRunning) handleGenerate(e as any);
                     }
                   }}
                   placeholder="Initiate prompt sequence..."
                   rows={1}
-                  style={{ minHeight: '60px', maxHeight: '250px' }}
+                  style={{ minHeight: "60px", maxHeight: "250px" }}
                   className="w-full bg-transparent py-4 px-4 md:px-6 text-lg md:text-xl outline-none placeholder:text-zinc-600 font-medium tracking-wide resize-none overflow-y-auto custom-scrollbar"
                 />
+                {/* Image Preview Box if custom image attached */}
+                {customImagePreview && (
+                  <div className="px-4 pt-2 flex items-center gap-3">
+                    <div className="relative group rounded-xl overflow-hidden border border-indigo-500/40 w-16 h-16 bg-black/40 shrink-0">
+                      <img src={customImagePreview} alt="Custom cover preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={removeCustomImage}
+                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
+                        title="Remove image"
+                      >
+                        <X className="w-4 h-4 text-red-400" />
+                      </button>
+                    </div>
+                    <div className="text-xs text-indigo-300 font-medium">
+                      <p className="font-bold text-white">Custom cover image attached</p>
+                      <p className="text-zinc-400 text-[11px]">Will use your uploaded image instead of AI auto-generation</p>
+                    </div>
+                  </div>
+                )}
 
-                <div className="flex justify-end pt-2 pr-2">
+                <div className="flex justify-between items-center pt-2 px-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageSelect}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isRunning}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
+                      customImagePreview
+                        ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                        : "bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border-white/10"
+                    }`}
+                    title="Upload Custom Cover Image"
+                  >
+                    <ImageIcon className="w-4 h-4 text-indigo-400" />
+                    <span>{customImagePreview ? "Change Image" : "Attach Image"}</span>
+                  </button>
+
                   <button
                     type="submit"
                     disabled={isRunning || !topic.trim()}
@@ -609,7 +682,7 @@ export default function Home() {
             {isRunning && !result && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
+                animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
                 className="max-w-4xl mx-auto mb-16"
               >
@@ -621,21 +694,17 @@ export default function Home() {
 
                   {/* Vertical Agent Pipeline */}
                   <div className="relative pl-6 md:pl-10 pb-4">
-                    {/* Connecting line background */}
                     <div className="absolute left-[33px] md:left-[49px] top-4 bottom-4 w-[2px] bg-white/5 rounded-full" />
-                    
                     <div className="space-y-8 relative">
                       {AGENTS.map((agent, i) => {
-                        const isActive = activeAgent === agent.id;
+                        const isActive   = activeAgent === agent.id;
                         const isComplete = completedAgents.includes(agent.id);
-                        const isPending = !isActive && !isComplete;
-                        const state = agentStates[agent.id];
-
+                        const isPending  = !isActive && !isComplete;
+                        const state      = agentStates[agent.id];
                         return (
                           <div key={agent.id} className="relative flex items-start gap-4 md:gap-6 group">
-                            {/* Connecting Line Progress (only filled if complete or active) */}
                             {i < AGENTS.length - 1 && (isComplete || isActive) && (
-                              <motion.div 
+                              <motion.div
                                 className="absolute left-[9px] md:left-[9px] top-10 bottom-[-32px] w-[2px] bg-gradient-to-b from-indigo-500 to-cyan-400 z-0 origin-top"
                                 initial={{ scaleY: 0 }}
                                 animate={{ scaleY: isComplete ? 1 : 0.5 }}
@@ -643,14 +712,16 @@ export default function Home() {
                               />
                             )}
 
-                            {/* Node Icon */}
                             <div className="relative z-10 shrink-0 mt-1">
                               <div className={`
                                 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-500
-                                ${isActive ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.6)] scale-110' 
-                                  : isComplete ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                  : 'bg-white/5 text-zinc-600 border border-white/5'}
-                              `}>
+                                ${isActive
+                                  ? "bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.6)] scale-110"
+                                  : isComplete
+                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                    : "bg-white/5 text-zinc-600 border border-white/5"
+                                }`}
+                              >
                                 {isComplete ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <agent.icon className="w-5 h-5 md:w-6 md:h-6" />}
                                 {isActive && (
                                   <div className="absolute inset-0 rounded-full border-2 border-indigo-400 opacity-50 animate-ping" />
@@ -658,10 +729,11 @@ export default function Home() {
                               </div>
                             </div>
 
-                            {/* Content */}
-                            <div className={`flex-1 transition-all duration-300 ${isPending ? 'opacity-40' : 'opacity-100'}`}>
+                            <div className={`flex-1 transition-all duration-300 ${isPending ? "opacity-40" : "opacity-100"}`}>
                               <div className="flex items-center gap-3">
-                                <h4 className={`text-base md:text-lg font-bold ${isActive ? 'text-indigo-300' : isComplete ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                                <h4 className={`text-base md:text-lg font-bold ${
+                                  isActive ? "text-indigo-300" : isComplete ? "text-emerald-400" : "text-zinc-300"
+                                }`}>
                                   {agent.id}
                                 </h4>
                                 {isActive && state?.usingTool && (
@@ -671,10 +743,8 @@ export default function Home() {
                                 )}
                               </div>
                               <p className="text-zinc-500 text-xs md:text-sm mb-1">{agent.desc}</p>
-                              
-                              {/* Live Status Text */}
                               {isActive && state && (
-                                <motion.div 
+                                <motion.div
                                   initial={{ opacity: 0, y: -5 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   className="mt-2 text-sm text-indigo-200/80 font-medium italic flex items-center gap-2"
@@ -692,9 +762,9 @@ export default function Home() {
 
                   {/* Collapsible Raw Logs */}
                   <div className="mt-8 pt-6 border-t border-white/5">
-                    <button 
+                    <button
                       onClick={() => setShowRawLogs(!showRawLogs)}
-                      className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors mx-auto"
+                      className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-200 transition-colors mx-auto"
                     >
                       {showRawLogs ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       {showRawLogs ? "Hide detailed logs" : "View detailed logs"}
@@ -704,14 +774,14 @@ export default function Home() {
                       {showRawLogs && (
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
+                          animate={{ opacity: 1, height: "auto" }}
                           exit={{ opacity: 0, height: 0 }}
                           className="mt-4"
                         >
-                          <div className="bg-[#02040A] rounded-2xl border border-white/5 p-5 font-mono text-[13px] text-zinc-400 h-[250px] overflow-y-auto custom-scrollbar shadow-inner">
+                          <div className="bg-[#02040A] rounded-2xl border border-white/5 p-5 font-mono text-[13px] text-zinc-500 h-[250px] overflow-y-auto custom-scrollbar shadow-inner">
                             {logs.map((log, i) => (
                               <div key={i} className="mb-1.5 break-words">
-                                <span className="text-indigo-500 font-bold mr-3">{'>'}</span>
+                                <span className="text-indigo-500 font-bold mr-3">{">"}</span>
                                 <span className="opacity-90">{log}</span>
                               </div>
                             ))}
@@ -721,7 +791,6 @@ export default function Home() {
                       )}
                     </AnimatePresence>
                   </div>
-
                 </div>
               </motion.div>
             )}
@@ -739,33 +808,36 @@ export default function Home() {
                   {/* Header */}
                   <div className="p-8 border-b border-white/5 bg-white/[0.02]">
                     <div className="flex justify-between items-start flex-wrap gap-4 mb-3">
-                      <h2 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">{result.title || "Content Package Synthesized"}</h2>
+                      <h2 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
+                        {result.title || "Content Package Synthesized"}
+                      </h2>
                       {discordPosted && (
                         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(16,185,129,0.15)]">
-                          <CheckCircle2 className="w-4 h-4" />
-                          Broadcasted
+                          <CheckCircle2 className="w-4 h-4" /> Broadcasted
                         </div>
                       )}
                     </div>
-                    <p className="text-zinc-400 text-sm md:text-base leading-relaxed max-w-3xl">{result.summary || "Generated successfully by your AI crew."}</p>
+                    <p className="text-zinc-400 text-sm md:text-base leading-relaxed max-w-3xl">
+                      {result.summary || "Generated successfully by your AI crew."}
+                    </p>
                   </div>
 
                   {/* Tabs */}
                   <div className="flex overflow-x-auto border-b border-white/5 bg-black/20 custom-scrollbar">
                     {[
-                      { id: 'blog', label: 'Article Data', icon: AlignLeft },
-                      { id: 'twitter', label: 'Thread Sync', icon: Share2 },
-                      { id: 'linkedin', label: 'Professional Node', icon: Briefcase },
-                      { id: 'email', label: 'Broadcast', icon: Mail },
-                      { id: 'discord', label: 'Discord', icon: MessageSquare }
+                      { id: "blog",     label: "Article Data",       icon: AlignLeft },
+                      { id: "twitter",  label: "Thread Sync",        icon: Share2 },
+                      { id: "linkedin", label: "Professional Node",  icon: Briefcase },
+                      { id: "email",    label: "Broadcast",          icon: Mail },
+                      { id: "discord",  label: "Discord",            icon: MessageSquare },
                     ].map(tab => (
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-2 px-6 py-4 text-sm font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap
                           ${activeTab === tab.id
-                            ? 'border-indigo-400 text-indigo-300 bg-indigo-500/10 shadow-[inset_0_-2px_10px_rgba(99,102,241,0.2)]'
-                            : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                            ? "border-indigo-400 text-indigo-300 bg-indigo-500/10 shadow-[inset_0_-2px_10px_rgba(99,102,241,0.2)]"
+                            : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
                           }`}
                       >
                         <tab.icon className="w-4 h-4" />
@@ -779,32 +851,37 @@ export default function Home() {
                     <div className="flex justify-end mb-6">
                       <button
                         onClick={() => {
-                          const content = activeTab === 'blog' ? result.blog_post :
-                            activeTab === 'twitter' ? result.twitter_thread :
-                              activeTab === 'linkedin' ? result.linkedin_post :
-                                result.email_blurb;
+                          const content =
+                            activeTab === "blog"     ? result.blog_post :
+                            activeTab === "twitter"  ? result.twitter_thread :
+                            activeTab === "linkedin" ? result.linkedin_post :
+                                                       result.email_blurb;
                           copyToClipboard(content, activeTab);
                         }}
                         className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/10 hover:border-white/20"
                       >
-                        {copiedTab === activeTab ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-indigo-400" />}
-                        {copiedTab === activeTab ? <span className="text-emerald-400">Copied</span> : <span>Extract</span>}
+                        {copiedTab === activeTab
+                          ? <><Check className="w-4 h-4 text-emerald-400" /><span className="text-emerald-400">Copied</span></>
+                          : <><Copy  className="w-4 h-4 text-indigo-400" /><span>Extract</span></>
+                        }
                       </button>
                     </div>
 
                     <div className="prose prose-invert prose-indigo max-w-none prose-lg">
-                      {activeTab === 'blog' && <ReactMarkdown>{result.blog_post}</ReactMarkdown>}
-                      {activeTab === 'twitter' && renderSocialCard(result.twitter_thread, 'Twitter', Share2)}
-                      {activeTab === 'linkedin' && renderSocialCard(result.linkedin_post, 'LinkedIn', Briefcase)}
-                      {activeTab === 'email' && renderSocialCard(result.email_blurb, 'Email', Mail)}
-                      {activeTab === 'discord' && (
+                      {activeTab === "blog"     && <ReactMarkdown>{result.blog_post}</ReactMarkdown>}
+                      {activeTab === "twitter"  && renderSocialCard(result.twitter_thread, "Twitter",  Share2)}
+                      {activeTab === "linkedin" && renderSocialCard(result.linkedin_post,  "LinkedIn", Briefcase)}
+                      {activeTab === "email"    && renderSocialCard(result.email_blurb,    "Email",    Mail)}
+                      {activeTab === "discord"  && (
                         <div className="flex flex-col items-center">
-                          {renderSocialCard(discordPreview || result.discord_preview || result.summary || result.title || "Discord Preview", 'Discord', MessageSquare)}
+                          {renderSocialCard(
+                            discordPreview || result.discord_preview || result.summary || result.title || "Discord Preview",
+                            "Discord", MessageSquare
+                          )}
                           <div className="mt-8 flex flex-col items-center">
                             {discordPosted ? (
                               <div className="flex items-center gap-2 text-emerald-400 font-bold bg-emerald-500/10 px-6 py-3 rounded-2xl border border-emerald-500/20">
-                                <CheckCircle2 className="w-5 h-5" />
-                                Posted to Discord
+                                <CheckCircle2 className="w-5 h-5" /> Posted to Discord
                               </div>
                             ) : (
                               <>
@@ -829,6 +906,7 @@ export default function Home() {
               </motion.div>
             )}
           </AnimatePresence>
+
         </div>
       </main>
     </div>

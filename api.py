@@ -3,7 +3,8 @@ import os
 import sys
 import json
 from typing import Optional
-from fastapi import FastAPI, Request
+import time
+from fastapi import FastAPI, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -27,6 +28,16 @@ app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 
 class GenerateRequest(BaseModel):
     topic: str
+    image_path: Optional[str] = None
+
+@app.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    os.makedirs("outputs", exist_ok=True)
+    filename = f"upload_{int(time.time())}_{file.filename}"
+    filepath = os.path.join("outputs", filename)
+    with open(filepath, "wb") as f:
+        f.write(await file.read())
+    return {"image_path": filepath}
 
 @app.post("/generate")
 async def generate_content(req: GenerateRequest, request: Request):
@@ -35,9 +46,13 @@ async def generate_content(req: GenerateRequest, request: Request):
         env['PYTHONIOENCODING'] = 'utf-8'
         python_exe = sys.executable
         
+        cmd = [python_exe, "crew_setup.py", req.topic]
+        if req.image_path:
+            cmd.extend(["--image", req.image_path])
+
         # Run the crew pipeline in a subprocess so we can stream its stdout
         process = subprocess.Popen(
-            [python_exe, "crew_setup.py", req.topic],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, # Merge stderr into stdout
             text=True,
@@ -94,7 +109,16 @@ async def generate_content(req: GenerateRequest, request: Request):
                     cleaned = cleaned[3:]
                 if cleaned.endswith("```"):
                     cleaned = cleaned[:-3]
-                
+                cleaned = cleaned.strip()
+
+                try:
+                    # strict=False allows unescaped control chars (like raw newlines/tabs inside string values) from LLM output
+                    parsed_obj = json.loads(cleaned, strict=False)
+                    # json.dumps ensures all control characters in strings are properly escaped (e.g. \n, \t)
+                    cleaned = json.dumps(parsed_obj)
+                except Exception as e:
+                    print(f"Warning: strict=False JSON parse fallback: {e}")
+
                 payload = {
                     "type": "complete", 
                     "content": cleaned,

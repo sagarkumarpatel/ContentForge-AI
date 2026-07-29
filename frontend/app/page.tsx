@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Loader2, CheckCircle2, Copy, Terminal, AlignLeft, Share2, Briefcase, Mail, Sparkles, Check, Menu, X, Trash2, Edit2, Plus, MessageSquare, Clock, LayoutDashboard, GitBranch, Settings, BarChart2 } from "lucide-react";
+import { Search, Loader2, CheckCircle2, Copy, Terminal, AlignLeft, Share2, Briefcase, Mail, Sparkles, Check, Menu, X, Trash2, Edit2, Plus, MessageSquare, Clock, LayoutDashboard, GitBranch, Settings, BarChart2, ChevronDown, ChevronUp, Wrench } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Session {
@@ -40,6 +40,8 @@ export default function Home() {
   const [isPublishingDiscord, setIsPublishingDiscord] = useState(false);
   const [discordPublishError, setDiscordPublishError] = useState<string | null>(null);
   const [discordPreview, setDiscordPreview] = useState<string | null>(null);
+  const [agentStates, setAgentStates] = useState<Record<string, { status: string, usingTool: boolean }>>({});
+  const [showRawLogs, setShowRawLogs] = useState(false);
 
   // Sidebar & History State
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -108,6 +110,8 @@ export default function Home() {
     setDiscordPreview(null);
     setImageError(false);
     setActiveSessionId(null);
+    setAgentStates({ "Topic Analyzer": { status: "Initializing...", usingTool: false } });
+    setShowRawLogs(false);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
 
     try {
@@ -127,6 +131,8 @@ export default function Home() {
       let finalDiscordPosted = false;
       let finalDiscordPreview = null;
 
+      let currentActiveAgent: string | null = "Topic Analyzer";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -145,15 +151,51 @@ export default function Home() {
 
                 const cleanLog = logContent.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
 
-                const agentMatch = cleanLog.match(/Working Agent: (.*?)(?:\s|$)/i) || cleanLog.match(/Agent:\s*(.*?)$/i) || cleanLog.match(/Agent: (.*?)(?:\s|$)/i);
+                const agentMatch = cleanLog.match(/Working Agent: (.*?)(?:\s|$)/i) || cleanLog.match(/# Agent:\s*(.*?)$/i) || cleanLog.match(/Agent: (.*?)(?:\s|$)/i);
                 if (agentMatch) {
                   const agentName = agentMatch[1].trim();
                   const matchedAgent = AGENTS.find(a => a.id.includes(agentName) || agentName.includes(a.id.split(" ")[0]));
 
-                  if (matchedAgent && matchedAgent.id !== activeAgent) {
-                    setCompletedAgents(prev => [...new Set([...prev, activeAgent || ""])].filter(Boolean));
-                    setActiveAgent(matchedAgent.id);
+                  if (matchedAgent && matchedAgent.id !== currentActiveAgent) {
+                    if (currentActiveAgent) {
+                      setCompletedAgents(prev => [...new Set([...prev, currentActiveAgent!])].filter(Boolean));
+                    }
+                    currentActiveAgent = matchedAgent.id;
+                    setActiveAgent(currentActiveAgent);
+                    
+                    setAgentStates(prev => ({
+                        ...prev,
+                        [currentActiveAgent!]: { status: "Starting task...", usingTool: false }
+                    }));
                   }
+                }
+                
+                if (currentActiveAgent) {
+                   let updatedStatus = null;
+                   let usingTool = false;
+
+                   if (cleanLog.includes("Thought:")) {
+                     updatedStatus = cleanLog.split("Thought:")[1].trim();
+                   } else if (cleanLog.includes("Using tool:")) {
+                     updatedStatus = cleanLog.split("Using tool:")[1].trim();
+                     usingTool = true;
+                   } else if (cleanLog.includes("Action:")) {
+                     updatedStatus = "Tool: " + cleanLog.split("Action:")[1].trim();
+                     usingTool = true;
+                   } else if (cleanLog.includes("Task:")) {
+                     updatedStatus = "Analyzing task requirements...";
+                   } else if (cleanLog.includes("Final Answer:")) {
+                     updatedStatus = "Finalizing output...";
+                   }
+
+                   if (updatedStatus) {
+                     // truncate if too long
+                     if (updatedStatus.length > 60) updatedStatus = updatedStatus.substring(0, 60) + "...";
+                     setAgentStates(prev => ({
+                        ...prev,
+                        [currentActiveAgent!]: { status: updatedStatus!, usingTool }
+                     }));
+                   }
                 }
               } else if (data.type === 'complete') {
                 try {
@@ -256,6 +298,8 @@ export default function Home() {
     setDiscordPreview(null);
     setActiveSessionId(null);
     setLogs([]);
+    setAgentStates({});
+    setShowRawLogs(false);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
@@ -281,24 +325,28 @@ export default function Home() {
     setEditingSessionId(null);
   };
 
-  const renderSocialCard = (content: string, platform: string, icon: any) => {
+  const renderSocialCard = (rawContent: any, platform: string, icon: any) => {
     const Icon = icon;
+    const content = Array.isArray(rawContent) ? rawContent.join('\n\n') : String(rawContent || "");
+
     return (
-      <div className="glass-card rounded-2xl overflow-hidden max-w-2xl mx-auto">
+      <div className="glass-card rounded-3xl overflow-hidden max-w-2xl mx-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent">
         {imageUrl && !imageError && (
           <img
             src={imageUrl.startsWith('http') ? imageUrl : `http://localhost:8000${imageUrl}`}
             alt={`${platform} Cover`}
             onError={() => setImageError(true)}
-            className="w-full h-48 md:h-64 object-cover border-b border-zinc-800"
+            className="w-full h-48 md:h-64 object-cover border-b border-white/5"
           />
         )}
-        <div className="p-6 md:p-8">
-          <div className="flex items-center gap-2 mb-4 text-indigo-400 text-sm font-medium uppercase tracking-wider">
-            <Icon className="w-4 h-4" />
-            <span>{platform} Preview</span>
+        <div className="p-8 md:p-10">
+          <div className="flex items-center gap-3 mb-8 text-indigo-400 text-sm font-black uppercase tracking-widest border-b border-indigo-500/20 pb-5">
+            <Icon className="w-5 h-5 drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
+            <span className="drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]">{platform} Preview</span>
           </div>
-          <pre className="whitespace-pre-wrap font-sans text-zinc-300 bg-transparent p-0 m-0 text-[15px] leading-relaxed">{content}</pre>
+          <div className="prose prose-invert prose-indigo prose-p:leading-loose prose-p:text-[17px] prose-p:text-zinc-200 prose-headings:text-white prose-headings:font-black prose-li:text-zinc-200 prose-li:text-[17px] max-w-none font-sans prose-strong:text-indigo-300">
+            <ReactMarkdown>{content}</ReactMarkdown>
+          </div>
         </div>
       </div>
     );
@@ -556,27 +604,124 @@ export default function Home() {
             </motion.form>
           )}
 
-          {/* Loading Logs */}
+          {/* Loading Logs & Pipeline Visualization */}
           <AnimatePresence>
             {isRunning && !result && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="max-w-4xl mx-auto mb-16 glass-card rounded-3xl p-6"
+                className="max-w-4xl mx-auto mb-16"
               >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
-                  <span className="text-sm font-bold text-cyan-400 tracking-wider uppercase">System Output Stream</span>
-                </div>
-                <div className="bg-[#02040A] rounded-2xl border border-white/5 p-5 font-mono text-[13px] text-zinc-400 h-[300px] overflow-y-auto custom-scrollbar shadow-inner">
-                  {logs.map((log, i) => (
-                    <div key={i} className="mb-1.5 break-words">
-                      <span className="text-indigo-500 font-bold mr-3">{'>'}</span>
-                      <span className="opacity-90">{log}</span>
+                <div className="glass-card rounded-3xl p-6 md:p-8 relative overflow-hidden">
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.8)]" />
+                    <span className="text-sm font-bold text-indigo-400 tracking-wider uppercase">Live Pipeline Execution</span>
+                  </div>
+
+                  {/* Vertical Agent Pipeline */}
+                  <div className="relative pl-6 md:pl-10 pb-4">
+                    {/* Connecting line background */}
+                    <div className="absolute left-[33px] md:left-[49px] top-4 bottom-4 w-[2px] bg-white/5 rounded-full" />
+                    
+                    <div className="space-y-8 relative">
+                      {AGENTS.map((agent, i) => {
+                        const isActive = activeAgent === agent.id;
+                        const isComplete = completedAgents.includes(agent.id);
+                        const isPending = !isActive && !isComplete;
+                        const state = agentStates[agent.id];
+
+                        return (
+                          <div key={agent.id} className="relative flex items-start gap-4 md:gap-6 group">
+                            {/* Connecting Line Progress (only filled if complete or active) */}
+                            {i < AGENTS.length - 1 && (isComplete || isActive) && (
+                              <motion.div 
+                                className="absolute left-[9px] md:left-[9px] top-10 bottom-[-32px] w-[2px] bg-gradient-to-b from-indigo-500 to-cyan-400 z-0 origin-top"
+                                initial={{ scaleY: 0 }}
+                                animate={{ scaleY: isComplete ? 1 : 0.5 }}
+                                transition={{ duration: 0.5 }}
+                              />
+                            )}
+
+                            {/* Node Icon */}
+                            <div className="relative z-10 shrink-0 mt-1">
+                              <div className={`
+                                w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-500
+                                ${isActive ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.6)] scale-110' 
+                                  : isComplete ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                  : 'bg-white/5 text-zinc-600 border border-white/5'}
+                              `}>
+                                {isComplete ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <agent.icon className="w-5 h-5 md:w-6 md:h-6" />}
+                                {isActive && (
+                                  <div className="absolute inset-0 rounded-full border-2 border-indigo-400 opacity-50 animate-ping" />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Content */}
+                            <div className={`flex-1 transition-all duration-300 ${isPending ? 'opacity-40' : 'opacity-100'}`}>
+                              <div className="flex items-center gap-3">
+                                <h4 className={`text-base md:text-lg font-bold ${isActive ? 'text-indigo-300' : isComplete ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                                  {agent.id}
+                                </h4>
+                                {isActive && state?.usingTool && (
+                                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] md:text-xs font-bold uppercase tracking-wider animate-pulse">
+                                    <Wrench className="w-3 h-3" /> Tool Active
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-zinc-500 text-xs md:text-sm mb-1">{agent.desc}</p>
+                              
+                              {/* Live Status Text */}
+                              {isActive && state && (
+                                <motion.div 
+                                  initial={{ opacity: 0, y: -5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="mt-2 text-sm text-indigo-200/80 font-medium italic flex items-center gap-2"
+                                >
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                                  "{state.status}"
+                                </motion.div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                  <div ref={logsEndRef} />
+                  </div>
+
+                  {/* Collapsible Raw Logs */}
+                  <div className="mt-8 pt-6 border-t border-white/5">
+                    <button 
+                      onClick={() => setShowRawLogs(!showRawLogs)}
+                      className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 transition-colors mx-auto"
+                    >
+                      {showRawLogs ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {showRawLogs ? "Hide detailed logs" : "View detailed logs"}
+                    </button>
+
+                    <AnimatePresence>
+                      {showRawLogs && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-4"
+                        >
+                          <div className="bg-[#02040A] rounded-2xl border border-white/5 p-5 font-mono text-[13px] text-zinc-400 h-[250px] overflow-y-auto custom-scrollbar shadow-inner">
+                            {logs.map((log, i) => (
+                              <div key={i} className="mb-1.5 break-words">
+                                <span className="text-indigo-500 font-bold mr-3">{'>'}</span>
+                                <span className="opacity-90">{log}</span>
+                              </div>
+                            ))}
+                            <div ref={logsEndRef} />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
                 </div>
               </motion.div>
             )}
